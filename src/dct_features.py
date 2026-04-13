@@ -144,7 +144,8 @@ def compute_dct_features(blocks: np.ndarray, n_coeffs: int,
 
 def extract_dct_features(gray: np.ndarray, block_size: int = 16,
                          block_step: int = 2, n_coeffs: int = 15,
-                         quantization_factor: int = 10) -> tuple:
+                         quantization_factor: int = 10,
+                         min_block_std: float = 0.0) -> tuple:
     """Full DCT feature extraction pipeline.
 
     Args:
@@ -153,6 +154,9 @@ def extract_dct_features(gray: np.ndarray, block_size: int = 16,
         block_step: Block overlap step.
         n_coeffs: Number of DCT coefficients.
         quantization_factor: Quantization divisor.
+        min_block_std: Minimum per-block intensity std-dev required to keep
+            a block for DCT matching. Blocks below this threshold are treated
+            as low-texture and removed before feature computation.
 
     Returns:
         Tuple of (features, positions) where:
@@ -162,6 +166,28 @@ def extract_dct_features(gray: np.ndarray, block_size: int = 16,
     blocks, positions = extract_blocks(gray, block_size, block_step)
     if len(blocks) == 0:
         return np.array([]), np.array([])
+
+    if min_block_std > 0:
+        texture_std = np.std(blocks.reshape(blocks.shape[0], -1), axis=1)
+        keep_mask = texture_std >= float(min_block_std)
+        kept = int(np.count_nonzero(keep_mask))
+
+        if kept == 0:
+            logger.warning(
+                "DCT extraction: all blocks filtered by texture threshold "
+                f"(std >= {min_block_std})."
+            )
+            return np.array([]), np.array([])
+
+        removed = len(blocks) - kept
+        if removed > 0:
+            logger.info(
+                "DCT extraction: filtered low-texture blocks "
+                f"{removed}/{len(blocks)} (std < {min_block_std})"
+            )
+
+        blocks = blocks[keep_mask]
+        positions = positions[keep_mask]
 
     features = compute_dct_features(blocks, n_coeffs, block_size,
                                     quantization_factor)

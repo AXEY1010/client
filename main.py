@@ -118,6 +118,7 @@ def process_image(image_path: str,
                 block_step=cfg.BLOCK_STEP,
                 n_coeffs=cfg.DCT_COEFFS,
                 quantization_factor=cfg.QUANTIZATION_FACTOR,
+                min_block_std=cfg.DCT_MIN_BLOCK_STD,
             )
 
         with timer(f"DCT matching (block={bs})", logger):
@@ -215,10 +216,14 @@ def process_image(image_path: str,
             dct_filtered_pairs, dct_valid_clusters, dct_largest_cluster_size,
             block_size=cfg.BLOCK_SIZE,
             min_area=cfg.MIN_REGION_AREA,
+            min_confirmed_regions=cfg.MIN_CONFIRMED_REGIONS,
             dilation_kernel_size=cfg.DILATION_KERNEL_SIZE,
             dilation_iterations=cfg.DILATION_ITERATIONS,
             min_cluster_matches=cfg.SIFT_MIN_CLUSTER_MATCHES,
             min_dct_standalone=cfg.MIN_DCT_STANDALONE_MATCHES,
+            dct_max_regions=cfg.DCT_STANDALONE_MAX_REGIONS,
+            dct_min_primary_fraction=cfg.DCT_STANDALONE_MIN_PRIMARY_FRACTION,
+            dct_min_top2_share=cfg.DCT_STANDALONE_MIN_TOP2_SHARE,
             image_bgr=image,
             enable_ela=cfg.ENABLE_ELA,
             ela_jpeg_quality=cfg.ELA_JPEG_QUALITY,
@@ -241,6 +246,10 @@ def process_image(image_path: str,
         output_image = draw_detection_overlay(
             image, merged_mask, sift_mask, dct_mask, regions,
             sift_filtered_pts1, sift_filtered_pts2,
+            forgery_detected=forgery_detected,
+            valid_cluster_count=(
+                len(sift_valid_clusters) + len(dct_valid_clusters)
+            ),
             color_dct=cfg.COLOR_DCT_MATCH,
             color_sift=cfg.COLOR_SIFT_MATCH,
             color_bbox=cfg.COLOR_BBOX,

@@ -41,6 +41,11 @@ DCT_COEFFS = 15
 # Higher values increase robustness to compression but reduce precision.
 QUANTIZATION_FACTOR = 10
 
+# Minimum per-block grayscale standard deviation required for DCT processing.
+# Suppresses low-texture regions (e.g., clear sky) that often produce
+# coincidental block matches.
+DCT_MIN_BLOCK_STD = 6.0
+
 
 # ==============================================================================
 # DCT Block Matching
@@ -158,11 +163,23 @@ MIN_DCT_STANDALONE_MATCHES = 45
 # Minimum contour area (pixels) for a detected region to be kept
 MIN_REGION_AREA = 40
 
+# Minimum number of localized regions required to confirm forgery.
+# Copy-move manipulations usually produce at least a source and destination
+# region; this helps reject single-blob false positives.
+MIN_CONFIRMED_REGIONS = 2
+
 # Dilation kernel size for expanding matched point regions into masks
 DILATION_KERNEL_SIZE = 13
 
 # Number of dilation iterations
 DILATION_ITERATIONS = 2
+
+# Additional standalone DCT spatial-consistency safeguards.
+# DCT-only detections should look like a small set of compact paired regions,
+# not many scattered fragments over repetitive textures.
+DCT_STANDALONE_MAX_REGIONS = 6
+DCT_STANDALONE_MIN_PRIMARY_FRACTION = 0.003
+DCT_STANDALONE_MIN_TOP2_SHARE = 0.70
 
 
 # ==============================================================================

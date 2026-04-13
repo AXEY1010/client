@@ -120,11 +120,15 @@ def dct_spatially_consistent(dct_mask: np.ndarray,
                              min_area: int = 50,
                              min_regions: int = 2,
                              max_region_fraction: float = 0.35,
-                             min_secondary_ratio: float = 0.10) -> bool:
+                             min_secondary_ratio: float = 0.10,
+                             max_regions: int = 8,
+                             min_primary_fraction: float = 0.002,
+                             min_top2_share: float = 0.65) -> bool:
     """Validate DCT-only detections using spatial consistency checks.
 
     Rejects detections dominated by one very large region or with fewer than
-    two meaningful disconnected regions.
+    two meaningful disconnected regions. Also rejects fragmented detections
+    where many small disconnected regions indicate repetitive-texture noise.
     """
     h, w = dct_mask.shape[:2]
     image_area = max(1, h * w)
@@ -145,11 +149,34 @@ def dct_spatially_consistent(dct_mask: np.ndarray,
         )
         return False
 
+    if len(areas) > max_regions:
+        logger.info(
+            "DCT standalone rejected: too many disconnected regions "
+            f"({len(areas)} > {max_regions})"
+        )
+        return False
+
     primary_ratio = areas[0] / image_area
+    if primary_ratio < min_primary_fraction:
+        logger.info(
+            "DCT standalone rejected: dominant region too small "
+            f"({primary_ratio:.4f} < {min_primary_fraction:.4f})"
+        )
+        return False
+
     if primary_ratio > max_region_fraction:
         logger.info(
             "DCT standalone rejected: dominant region covers too much of image "
             f"({primary_ratio:.2f} > {max_region_fraction:.2f})"
+        )
+        return False
+
+    total_area = max(1.0, float(sum(areas)))
+    top2_share = (areas[0] + areas[1]) / total_area
+    if top2_share < min_top2_share:
+        logger.info(
+            "DCT standalone rejected: top-2 region concentration too low "
+            f"({top2_share:.2f} < {min_top2_share:.2f})"
         )
         return False
 
@@ -190,7 +217,10 @@ def merge_masks(sift_mask: np.ndarray, dct_mask: np.ndarray,
                 dct_largest_cluster_size: int,
                 min_cluster_matches: int = 10,
                 min_dct_standalone: int = 80,
-                min_area: int = 50) -> np.ndarray:
+                min_area: int = 50,
+                dct_max_regions: int = 8,
+                dct_min_primary_fraction: float = 0.002,
+                dct_min_top2_share: float = 0.65) -> np.ndarray:
     """Merge SIFT and DCT masks using refined confirmation rule.
 
     Improvement #7:
@@ -210,6 +240,9 @@ def merge_masks(sift_mask: np.ndarray, dct_mask: np.ndarray,
         min_cluster_matches: Min cluster size for baseline confirmation.
         min_dct_standalone: Min DCT matches for standalone confirmation.
         min_area: Minimum region area used for spatial consistency checks.
+        dct_max_regions: Max disconnected regions allowed for DCT-only path.
+        dct_min_primary_fraction: Min dominant-region area/image ratio.
+        dct_min_top2_share: Min top-2 region area share.
 
     Returns:
         Merged binary mask.
@@ -233,7 +266,13 @@ def merge_masks(sift_mask: np.ndarray, dct_mask: np.ndarray,
             if np.any(guided_dct_mask > 0):
                 merged = cv2.bitwise_or(merged, guided_dct_mask)
     elif dct_standalone_ok:
-        if dct_spatially_consistent(dct_mask, min_area=min_area):
+        if dct_spatially_consistent(
+            dct_mask,
+            min_area=min_area,
+            max_regions=dct_max_regions,
+            min_primary_fraction=dct_min_primary_fraction,
+            min_top2_share=dct_min_top2_share,
+        ):
             dominant_dct_mask = keep_dominant_components(
                 dct_mask,
                 min_area=min_area,
@@ -403,10 +442,14 @@ def localize_forgery(image_shape: tuple,
                      dct_largest_cluster_size: int,
                      block_size: int = 16,
                      min_area: int = 50,
+                     min_confirmed_regions: int = 1,
                      dilation_kernel_size: int = 15,
                      dilation_iterations: int = 3,
                      min_cluster_matches: int = 10,
                      min_dct_standalone: int = 80,
+                     dct_max_regions: int = 8,
+                     dct_min_primary_fraction: float = 0.002,
+                     dct_min_top2_share: float = 0.65,
                      image_bgr: np.ndarray | None = None,
                      enable_ela: bool = False,
                      ela_jpeg_quality: int = 90,
@@ -433,10 +476,15 @@ def localize_forgery(image_shape: tuple,
         dct_largest_cluster_size: Largest accepted DCT cluster size.
         block_size: DCT block size.
         min_area: Minimum region area.
+        min_confirmed_regions: Minimum number of localized regions required
+            to classify as confirmed forgery.
         dilation_kernel_size: Dilation kernel size.
         dilation_iterations: Number of dilation passes.
         min_cluster_matches: Min cluster size for baseline confirmation.
         min_dct_standalone: Min DCT matches for standalone confirmation.
+        dct_max_regions: Max disconnected regions allowed for DCT-only path.
+        dct_min_primary_fraction: Min dominant-region area/image ratio.
+        dct_min_top2_share: Min top-2 region area share.
         image_bgr: Original/preprocessed BGR image for ELA analysis.
         enable_ela: Whether to run ELA evidence extraction.
         ela_jpeg_quality: JPEG quality for synthetic ELA recompression.
@@ -486,6 +534,9 @@ def localize_forgery(image_shape: tuple,
         min_cluster_matches=min_cluster_matches,
         min_dct_standalone=min_dct_standalone,
         min_area=min_area,
+        dct_max_regions=dct_max_regions,
+        dct_min_primary_fraction=dct_min_primary_fraction,
+        dct_min_top2_share=dct_min_top2_share,
     )
 
     # Apply a small close operation to improve region continuity.
@@ -553,6 +604,15 @@ def localize_forgery(image_shape: tuple,
         ela_weight=ela_confidence_weight,
     )
 
-    forgery_detected = len(regions) > 0
+    forgery_detected = len(regions) >= max(1, min_confirmed_regions)
+
+    if not forgery_detected and len(regions) > 0:
+        logger.info(
+            "Detection rejected: insufficient confirmed regions "
+            f"({len(regions)} < {max(1, min_confirmed_regions)})"
+        )
+        regions = []
+        merged_mask = np.zeros_like(merged_mask)
+        confidence = 0.0
 
     return merged_mask, regions, forgery_detected, sift_mask, dct_mask, confidence

@@ -30,6 +30,8 @@ def draw_detection_overlay(image: np.ndarray,
                            regions: list,
                            sift_pts1: np.ndarray = None,
                            sift_pts2: np.ndarray = None,
+                           forgery_detected: bool = False,
+                           valid_cluster_count: int = 0,
                            color_dct=(0, 0, 255),
                            color_sift=(0, 255, 255),
                            color_bbox=(0, 255, 0),
@@ -44,6 +46,8 @@ def draw_detection_overlay(image: np.ndarray,
         regions: List of detected region dicts with 'bbox' keys.
         sift_pts1: SIFT source points for drawing match lines.
         sift_pts2: SIFT destination points for drawing match lines.
+        forgery_detected: Final detection decision from localization.
+        valid_cluster_count: Number of accepted displacement clusters.
         color_dct: BGR color for DCT detections.
         color_sift: BGR color for SIFT match lines.
         color_bbox: BGR color for bounding boxes.
@@ -53,46 +57,52 @@ def draw_detection_overlay(image: np.ndarray,
         Annotated image.
     """
     output = image.copy()
+    show_highlights = bool(forgery_detected) and valid_cluster_count > 0
 
-    # Semi-transparent heatmap overlay for merged forgery regions.
-    if np.any(merged_mask > 0):
-        heat_seed = cv2.GaussianBlur(merged_mask, (5, 5), 0)
-        heatmap = cv2.applyColorMap(heat_seed, cv2.COLORMAP_JET)
-        blended = cv2.addWeighted(output, 0.7, heatmap, 0.3, 0)
-        mask_idx = merged_mask > 0
-        output[mask_idx] = blended[mask_idx]
+    if show_highlights:
+        # Semi-transparent heatmap overlay for confirmed forgery regions.
+        if np.any(merged_mask > 0):
+            heat_seed = cv2.GaussianBlur(merged_mask, (5, 5), 0)
+            heatmap = cv2.applyColorMap(heat_seed, cv2.COLORMAP_JET)
+            blended = cv2.addWeighted(output, 0.7, heatmap, 0.3, 0)
+            mask_idx = merged_mask > 0
+            output[mask_idx] = blended[mask_idx]
 
-    # DCT mask overlay (red)
-    if np.any(dct_mask > 0):
-        dct_overlay = output.copy()
-        dct_overlay[dct_mask > 0] = color_dct
-        output = cv2.addWeighted(dct_overlay, alpha, output, 1 - alpha, 0)
+        # Confirmed DCT region overlay (red).
+        if np.any(dct_mask > 0):
+            dct_overlay = output.copy()
+            dct_overlay[dct_mask > 0] = color_dct
+            output = cv2.addWeighted(dct_overlay, alpha, output, 1 - alpha, 0)
 
-    # SIFT mask overlay (slightly different shade)
-    if np.any(sift_mask > 0):
-        sift_overlay = output.copy()
-        sift_color = (0, 200, 255)  # Orange-ish
-        sift_overlay[sift_mask > 0] = sift_color
-        output = cv2.addWeighted(sift_overlay, alpha * 0.7, output,
-                                  1 - alpha * 0.7, 0)
+        # Candidate sparse matches shown in yellow only for confirmed cases.
+        if np.any(sift_mask > 0):
+            sift_overlay = output.copy()
+            sift_color = (0, 200, 255)  # Yellow/orange candidate tone
+            sift_overlay[sift_mask > 0] = sift_color
+            output = cv2.addWeighted(
+                sift_overlay,
+                alpha * 0.7,
+                output,
+                1 - alpha * 0.7,
+                0,
+            )
 
-    # Draw SIFT match lines (yellow)
-    if sift_pts1 is not None and len(sift_pts1) > 0:
-        for pt1, pt2 in zip(sift_pts1, sift_pts2):
-            p1 = (int(round(pt1[0])), int(round(pt1[1])))
-            p2 = (int(round(pt2[0])), int(round(pt2[1])))
-            cv2.line(output, p1, p2, color_sift, 1, cv2.LINE_AA)
-            cv2.circle(output, p1, 3, color_sift, -1)
-            cv2.circle(output, p2, 3, color_sift, -1)
+        if sift_pts1 is not None and len(sift_pts1) > 0:
+            for pt1, pt2 in zip(sift_pts1, sift_pts2):
+                p1 = (int(round(pt1[0])), int(round(pt1[1])))
+                p2 = (int(round(pt2[0])), int(round(pt2[1])))
+                cv2.line(output, p1, p2, color_sift, 1, cv2.LINE_AA)
+                cv2.circle(output, p1, 3, color_sift, -1)
+                cv2.circle(output, p2, 3, color_sift, -1)
 
-    # Draw bounding boxes (green)
-    for region in regions:
-        x, y, w, h = region["bbox"]
-        cv2.rectangle(output, (x, y), (x + w, y + h), color_bbox, 2)
+        # Draw bounding boxes for confirmed regions.
+        for region in regions:
+            x, y, w, h = region["bbox"]
+            cv2.rectangle(output, (x, y), (x + w, y + h), color_bbox, 2)
 
     # Add text label
-    forgery_text = "FORGERY DETECTED" if regions else "NO FORGERY"
-    text_color = (0, 0, 255) if regions else (0, 255, 0)
+    forgery_text = "FORGERY DETECTED" if show_highlights else "NO FORGERY DETECTED"
+    text_color = (0, 0, 255) if show_highlights else (0, 255, 0)
     cv2.putText(output, forgery_text, (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.0, text_color, 2,
                 cv2.LINE_AA)
