@@ -21,7 +21,7 @@ The final pipeline merges results from both techniques using **displacement vect
 - **Debug visualizations**: Keypoints, match lines, displacement plots, cluster heatmaps
 - **Ground truth evaluation**: Automatic precision/recall/F1 computation
 - **Web interface**: Flask-based upload and visualization with comparison slider
-- **REST API**: Programmatic access via `POST /api/detect`
+- **Error Level Analysis (ELA)**: Detects JPEG compression inconsistencies
 
 ---
 
@@ -93,24 +93,6 @@ python app.py
 # → http://localhost:5000
 ```
 
-### REST API
-
-```bash
-curl -X POST -F "image=@photo.jpg" http://localhost:5000/api/detect
-```
-
-Response:
-```json
-{
-  "forgery_detected": true,
-  "confidence": 0.72,
-  "num_sift_clusters": 2,
-  "num_dct_clusters": 8,
-  "num_regions": 2,
-  "processing_time": 1.143
-}
-```
-
 ### Output
 
 - **Detection result**: `output/<image_name>_detected.png`
@@ -146,6 +128,7 @@ Preprocessing (grayscale, histogram eq, normalization, Gaussian blur, resize)
          (cluster-based, no isolated detections)
                     ↓
          Confidence Scoring (0.0 – 1.0)
+         (incorporates ELA evidence & multi-factor validation)
                     ↓
          Morphological processing + contour detection
                     ↓
@@ -180,6 +163,9 @@ All parameters are in `config.py`:
 | `MIN_CLUSTER_MATCHES` | 5 | Min matches per cluster |
 | `SIFT_MIN_VECTOR_DISTANCE` | 40 | Min SIFT displacement magnitude |
 | `MIN_DCT_STANDALONE_MATCHES` | 80 | Min DCT cluster for standalone confirmation |
+| `ENABLE_ELA` | True | Enable Error Level Analysis branch |
+| `ELA_JPEG_QUALITY` | 90 | Quality for synthetic ELA recompression |
+| `ELA_CONFIDENCE_WEIGHT`| 0.18 | Weight of ELA within confidence score |
 
 ---
 
@@ -193,6 +179,7 @@ Instead of just binary detection, the system outputs a **confidence score (0.0 �
 | DCT cluster count & size | 0.25 | Supporting block-level evidence |
 | SIFT + DCT agreement | 0.15 | Both methods agree = very strong signal |
 | Region quality | 0.20 | Reasonable region size, 2-region bonus |
+| ELA Evidence Bonus | 0.18 | Highlights compression inconsistencies |
 
 **Interpretation:**
 - **≥ 70%**: High confidence of tampering
@@ -299,6 +286,7 @@ copy_move_forgery/
 10. **Refined confirmation rule** — Requires cluster evidence, not isolated matches
 11. **Confidence scoring** — Continuous 0–100% based on multi-factor analysis
 12. **Morphological filtering** — Clean region boundaries
+13. **Error Level Analysis (ELA)** — Supplements geometric detection with compression cues
 
 ---
 
