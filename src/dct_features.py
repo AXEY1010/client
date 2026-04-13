@@ -16,11 +16,7 @@ logger = logging.getLogger("cmfd")
 
 
 def _zigzag_indices(n: int, count: int) -> list:
-    """Generate zigzag scan indices for an n×n matrix.
-
-    Returns the first `count` (row, col) indices in zigzag order,
-    starting from the top-left corner. This captures the most
-    significant (low-frequency) DCT coefficients.
+    """Generate zigzag scan indices.
 
     Args:
         n: Matrix dimension.
@@ -32,7 +28,7 @@ def _zigzag_indices(n: int, count: int) -> list:
     indices = []
     for s in range(2 * n - 1):
         if s % 2 == 0:
-            # Even diagonal: go down
+            # even block
             for i in range(min(s, n - 1), max(0, s - n + 1) - 1, -1):
                 j = s - i
                 if 0 <= j < n:
@@ -40,7 +36,7 @@ def _zigzag_indices(n: int, count: int) -> list:
                     if len(indices) == count:
                         return indices
         else:
-            # Odd diagonal: go up
+            # odd block
             for i in range(max(0, s - n + 1), min(s, n - 1) + 1):
                 j = s - i
                 if 0 <= j < n:
@@ -52,7 +48,7 @@ def _zigzag_indices(n: int, count: int) -> list:
 
 def extract_blocks(gray: np.ndarray, block_size: int, block_step: int
                    ) -> tuple:
-    """Extract overlapping blocks using stride tricks (vectorized).
+    """Extract overlapping blocks.
 
     Args:
         gray: Grayscale image as 2D numpy array.
@@ -70,14 +66,14 @@ def extract_blocks(gray: np.ndarray, block_size: int, block_step: int
                        f"({block_size}). Skipping DCT extraction.")
         return np.array([]), np.array([])
 
-    # Compute number of blocks in each dimension
+    # compute grid size
     n_rows = (h - block_size) // block_step + 1
     n_cols = (w - block_size) // block_step + 1
 
     logger.debug(f"Extracting {n_rows * n_cols} blocks "
                  f"({n_rows} rows × {n_cols} cols)")
 
-    # Use stride tricks for zero-copy block extraction
+    # extract blocks
     img = gray.astype(np.float64)
     strides = img.strides
     shape = (n_rows, n_cols, block_size, block_size)
@@ -86,10 +82,10 @@ def extract_blocks(gray: np.ndarray, block_size: int, block_step: int
 
     blocks_view = np.lib.stride_tricks.as_strided(img, shape=shape,
                                                    strides=new_strides)
-    # Reshape to (N, block_size, block_size)
+    # reshape
     blocks = blocks_view.reshape(-1, block_size, block_size).copy()
 
-    # Build position array
+    # build positions
     rows = np.arange(n_rows) * block_step
     cols = np.arange(n_cols) * block_step
     row_grid, col_grid = np.meshgrid(rows, cols, indexing="ij")
@@ -101,12 +97,7 @@ def extract_blocks(gray: np.ndarray, block_size: int, block_step: int
 def compute_dct_features(blocks: np.ndarray, n_coeffs: int,
                          block_size: int,
                          quantization_factor: int = 10) -> np.ndarray:
-    """Compute quantized DCT feature vectors for all blocks.
-
-    For each block:
-        1. Apply 2D DCT (via separable 1D DCTs)
-        2. Extract top `n_coeffs` coefficients in zigzag order
-        3. Quantize by rounding: coeff // quantization_factor
+    """Compute quantized DCT feature vectors.
 
     Args:
         blocks: ndarray of shape (N, block_size, block_size).
@@ -120,20 +111,19 @@ def compute_dct_features(blocks: np.ndarray, n_coeffs: int,
     if len(blocks) == 0:
         return np.array([])
 
-    # Precompute zigzag indices
+    # get zigzag indices
     zz_indices = _zigzag_indices(block_size, n_coeffs)
     zz_rows = np.array([idx[0] for idx in zz_indices])
     zz_cols = np.array([idx[1] for idx in zz_indices])
 
-    # Batch 2D DCT: apply along rows then columns
-    # dct(x, type=2, norm='ortho') along each axis
+    # compute 2D DCT
     dct_blocks = dct(dct(blocks, type=2, norm="ortho", axis=2),
                      type=2, norm="ortho", axis=1)
 
-    # Extract zigzag coefficients for all blocks at once
+    # extract zigzag coeffs
     features = dct_blocks[:, zz_rows, zz_cols]
 
-    # Quantize (Improvement #2)
+    # quantize
     features = np.round(features / quantization_factor).astype(np.int32)
 
     logger.debug(f"DCT features: {features.shape[0]} blocks × "
@@ -146,7 +136,7 @@ def extract_dct_features(gray: np.ndarray, block_size: int = 16,
                          block_step: int = 2, n_coeffs: int = 15,
                          quantization_factor: int = 10,
                          min_block_std: float = 0.0) -> tuple:
-    """Full DCT feature extraction pipeline.
+    """Extract DCT features.
 
     Args:
         gray: Preprocessed grayscale image.
@@ -154,9 +144,7 @@ def extract_dct_features(gray: np.ndarray, block_size: int = 16,
         block_step: Block overlap step.
         n_coeffs: Number of DCT coefficients.
         quantization_factor: Quantization divisor.
-        min_block_std: Minimum per-block intensity std-dev required to keep
-            a block for DCT matching. Blocks below this threshold are treated
-            as low-texture and removed before feature computation.
+        min_block_std: Minimum block standard deviation.
 
     Returns:
         Tuple of (features, positions) where:

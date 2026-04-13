@@ -88,10 +88,7 @@ def match_descriptors(descriptors: np.ndarray,
                       min_keypoint_distance: float = 10.0,
                       keypoints: list = None,
                       norm_type: int = cv2.NORM_L2) -> list:
-    """Self-match descriptors using BFMatcher + KNN + Lowe's ratio test.
-
-    Matches each descriptor against all others in the same image.
-    Filters out self-matches (same or nearby keypoints).
+    """Self-match descriptors.
 
     Args:
         descriptors: Descriptor matrix (K, D).
@@ -108,31 +105,31 @@ def match_descriptors(descriptors: np.ndarray,
 
     bf = cv2.BFMatcher(norm_type)
     matches = bf.knnMatch(descriptors, descriptors, k=3)
-    # k=3 because first match is always self-match (distance=0)
+    # self match
 
     valid_pairs = []
     seen = set()
 
     for match_group in matches:
-        # Skip the self-match (first result)
+        # skip self-match
         candidates = match_group[1:]  # Skip index 0 (self)
         if len(candidates) < 2:
             continue
 
         m, n = candidates[0], candidates[1]
 
-        # Lowe's ratio test
+        # apply ratio test
         if m.distance >= ratio_threshold * n.distance:
             continue
 
         idx1, idx2 = m.queryIdx, m.trainIdx
 
-        # Avoid duplicate pairs
+        # avoid duplicate pairs
         pair_key = (min(idx1, idx2), max(idx1, idx2))
         if pair_key in seen:
             continue
 
-        # Spatial distance check
+        # spatial check
         if keypoints is not None:
             pt1 = np.array(keypoints[idx1].pt)
             pt2 = np.array(keypoints[idx2].pt)
@@ -152,10 +149,7 @@ def match_descriptors(descriptors: np.ndarray,
 def ransac_filter(keypoints: list, match_pairs: list,
                   reproj_threshold: float = 5.0,
                   min_matches: int = 8) -> list:
-    """Filter matches using RANSAC homography estimation (Improvement #5).
-
-    Fits a homography to the matched keypoint positions and retains
-    only inlier matches.
+    """Filter matches using RANSAC.
 
     Args:
         keypoints: List of cv2.KeyPoint objects.

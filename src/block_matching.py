@@ -22,8 +22,6 @@ def lexicographic_sort(features: np.ndarray, positions: np.ndarray
                        ) -> tuple:
     """Sort feature vectors lexicographically.
 
-    Sorts by all columns left-to-right, so similar vectors end up adjacent.
-
     Args:
         features: Feature matrix of shape (N, D).
         positions: Position array of shape (N, 2).
@@ -31,7 +29,7 @@ def lexicographic_sort(features: np.ndarray, positions: np.ndarray
     Returns:
         Tuple of (sorted_features, sorted_positions, sort_indices).
     """
-    # np.lexsort sorts by last key first, so reverse column order
+    # sort features
     keys = [features[:, i] for i in range(features.shape[1] - 1, -1, -1)]
     sort_idx = np.lexsort(keys)
     return features[sort_idx], positions[sort_idx], sort_idx
@@ -41,11 +39,7 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
                          compare_window: int = 4,
                          match_threshold: float = 0.0,
                          min_vector_distance: float = 20.0) -> tuple:
-    """Find matching blocks using vectorized sliding window comparison.
-
-    After lexicographic sorting, compares each row with the next
-    `compare_window` rows using fully vectorized NumPy operations
-    (Improvement #1 + #11). No Python for-loops over blocks.
+    """Find matching blocks.
 
     Args:
         features: Feature matrix (N, D) — already quantized.
@@ -67,8 +61,7 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
         features, positions
     )
 
-    # Cap on total matches to prevent memory/time issues on repetitive images.
-    # DBSCAN downstream is O(n²), so this must be conservative.
+    # cap total matches
     MAX_MATCHES = 5000
 
     all_pos_i = []
@@ -79,31 +72,31 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
         if offset >= n:
             break
 
-        # Vectorized difference: compare row[i] with row[i+offset]
+        # vectorized diff
         feat_a = sorted_features[:n - offset]
         feat_b = sorted_features[offset:]
 
-        # L1 distance per row (sum of absolute differences)
+        # compute L1 distance
         diffs = np.sum(np.abs(feat_a - feat_b), axis=1)
 
-        # Mask: which pairs match?
+        # mask matches
         match_mask = diffs <= match_threshold
 
         if not np.any(match_mask):
             continue
 
-        # Extract matched positions
+        # get matched positions
         pos_a = sorted_positions[:n - offset][match_mask]
         pos_b = sorted_positions[offset:][match_mask]
 
-        # Compute displacement vectors
+        # compute displacements
         dvec = (pos_b - pos_a).astype(np.int64)
 
-        # Normalize direction: ensure consistent sign
+        # normalize direction
         flip_mask = (dvec[:, 0] < 0) | ((dvec[:, 0] == 0) & (dvec[:, 1] < 0))
         dvec[flip_mask] = -dvec[flip_mask]
 
-        # Filter by minimum displacement distance (Improvement #4)
+        # filter by min distance
         dist_sq = dvec[:, 0] ** 2 + dvec[:, 1] ** 2
         dist_mask = dist_sq >= (min_vector_distance ** 2)
 
@@ -118,7 +111,7 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
         all_pos_j.append(valid_pos_b)
         all_displacements.append(valid_dvec)
 
-        # Check cumulative match count
+        # check match count
         total = sum(len(d) for d in all_displacements)
         if total > MAX_MATCHES:
             logger.warning(
@@ -128,7 +121,7 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
             )
             break
 
-    # Combine results
+    # combine results
     if not all_displacements:
         logger.info(f"DCT block matching: 0 matches found (from {n} blocks)")
         return [], np.array([]).reshape(0, 2)
@@ -137,13 +130,13 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
     combined_pos_j = np.concatenate(all_pos_j, axis=0)
     displacements = np.concatenate(all_displacements, axis=0)
 
-    # Truncate if over cap
+    # truncate
     if len(displacements) > MAX_MATCHES:
         combined_pos_i = combined_pos_i[:MAX_MATCHES]
         combined_pos_j = combined_pos_j[:MAX_MATCHES]
         displacements = displacements[:MAX_MATCHES]
 
-    # Build matched_pairs list
+    # build pair list
     matched_pairs = [
         (tuple(a), tuple(b))
         for a, b in zip(combined_pos_i.tolist(), combined_pos_j.tolist())
@@ -158,9 +151,6 @@ def find_matching_blocks(features: np.ndarray, positions: np.ndarray,
 def histogram_voting(displacements: np.ndarray, n_bins: int = 50,
                      min_votes: int = 5) -> tuple:
     """Identify dominant displacement vectors via histogram voting.
-
-    Bins displacement vectors into a 2D histogram and returns vectors
-    belonging to bins with vote count >= min_votes (Improvement #8).
 
     Args:
         displacements: Array of shape (M, 2) with (dx, dy) vectors.
@@ -181,7 +171,7 @@ def histogram_voting(displacements: np.ndarray, n_bins: int = 50,
         displacements[:, 0], displacements[:, 1], bins=n_bins
     )
 
-    # Find which bin each displacement belongs to
+    # find bins
     x_bin = np.clip(
         np.digitize(displacements[:, 0], x_edges) - 1, 0, n_bins - 1
     )
@@ -189,7 +179,7 @@ def histogram_voting(displacements: np.ndarray, n_bins: int = 50,
         np.digitize(displacements[:, 1], y_edges) - 1, 0, n_bins - 1
     )
 
-    # Mark vectors in dominant bins
+    # mark dominant
     dominant_mask = hist[x_bin, y_bin] >= min_votes
 
     n_dominant = np.sum(dominant_mask)
@@ -230,7 +220,7 @@ def match_blocks(features: np.ndarray, positions: np.ndarray,
     if len(displacements) == 0:
         return [], np.array([]).reshape(0, 2), None
 
-    # Apply histogram voting (Improvement #8)
+    # apply voting
     dominant_mask, hist, x_edges, y_edges = histogram_voting(
         displacements, histogram_bins, histogram_min_votes
     )
@@ -239,11 +229,11 @@ def match_blocks(features: np.ndarray, positions: np.ndarray,
         filtered_pairs = [p for p, m in zip(matched_pairs, dominant_mask) if m]
         filtered_displacements = displacements[dominant_mask]
     elif len(matched_pairs) <= histogram_min_votes * 2:
-        # Very few matches — skip voting, keep all
+        # skip voting
         filtered_pairs = matched_pairs
         filtered_displacements = displacements
     else:
-        # Many matches but no dominant bin — likely noise, discard
+        # discard noise
         logger.info("Histogram voting: no dominant bins found with many "
                      f"matches ({len(matched_pairs)}). Discarding.")
         filtered_pairs = []

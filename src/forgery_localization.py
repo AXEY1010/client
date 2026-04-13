@@ -27,10 +27,7 @@ def create_sift_mask(image_shape: tuple,
                      points2: np.ndarray,
                      dilation_kernel_size: int = 15,
                      dilation_iterations: int = 3) -> np.ndarray:
-    """Create a binary mask from SIFT matched keypoints.
-
-    Marks both source and destination keypoint locations, then dilates
-    to form connected regions.
+    """Create a SIFT binary mask.
 
     Args:
         image_shape: (height, width) of the image.
@@ -48,7 +45,7 @@ def create_sift_mask(image_shape: tuple,
     if len(points1) == 0:
         return mask
 
-    # Mark keypoint locations
+    # mark keypoints
     for pt in points1:
         x, y = int(round(pt[0])), int(round(pt[1]))
         if 0 <= x < w and 0 <= y < h:
@@ -59,7 +56,7 @@ def create_sift_mask(image_shape: tuple,
         if 0 <= x < w and 0 <= y < h:
             cv2.circle(mask, (x, y), 3, 255, -1)
 
-    # Dilate to form regions
+    # form regions
     kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE,
         (dilation_kernel_size, dilation_kernel_size)
@@ -74,9 +71,7 @@ def create_dct_mask(image_shape: tuple,
                     block_size: int = 16,
                     dilation_kernel_size: int = 15,
                     dilation_iterations: int = 2) -> np.ndarray:
-    """Create a binary mask from DCT matched block pairs.
-
-    Marks both source and destination block regions.
+    """Create a DCT binary mask.
 
     Args:
         image_shape: (height, width) of the image.
@@ -95,17 +90,17 @@ def create_dct_mask(image_shape: tuple,
         return mask
 
     for (r1, c1), (r2, c2) in matched_pairs:
-        # Mark source block
+        # mark source
         r1e = min(r1 + block_size, h)
         c1e = min(c1 + block_size, w)
         mask[r1:r1e, c1:c1e] = 255
 
-        # Mark destination block
+        # mark destination
         r2e = min(r2 + block_size, h)
         c2e = min(c2 + block_size, w)
         mask[r2:r2e, c2:c2e] = 255
 
-    # Morphological closing + dilation
+    # apply morphology
     kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE,
         (dilation_kernel_size, dilation_kernel_size)
@@ -124,12 +119,7 @@ def dct_spatially_consistent(dct_mask: np.ndarray,
                              max_regions: int = 8,
                              min_primary_fraction: float = 0.002,
                              min_top2_share: float = 0.65) -> bool:
-    """Validate DCT-only detections using spatial consistency checks.
-
-    Rejects detections dominated by one very large region or with fewer than
-    two meaningful disconnected regions. Also rejects fragmented detections
-    where many small disconnected regions indicate repetitive-texture noise.
-    """
+    """Validate DCT-only detections using spatial checks."""
     h, w = dct_mask.shape[:2]
     image_area = max(1, h * w)
 
@@ -221,16 +211,7 @@ def merge_masks(sift_mask: np.ndarray, dct_mask: np.ndarray,
                 dct_max_regions: int = 8,
                 dct_min_primary_fraction: float = 0.002,
                 dct_min_top2_share: float = 0.65) -> np.ndarray:
-    """Merge SIFT and DCT masks using refined confirmation rule.
-
-    Improvement #7:
-        Forgery is confirmed if:
-        1. A SIFT displacement cluster exists with sufficient matches, OR
-        2. BOTH SIFT and DCT confirm (lower thresholds apply), OR
-        3. DCT-only has a very strong signal (>= min_dct_standalone matches)
-
-        Isolated or weak DCT-only detections are ignored to reduce
-        false positives from coincidentally similar textures.
+    """Merge SIFT and DCT masks.
 
     Args:
         sift_mask: SIFT detection mask.
@@ -254,9 +235,9 @@ def merge_masks(sift_mask: np.ndarray, dct_mask: np.ndarray,
 
     if sift_confirmed:
         merged = cv2.bitwise_or(merged, sift_mask)
-        # If SIFT confirms, also include DCT evidence
+        # include DCT
         if dct_has_cluster:
-            # Constrain DCT contribution to neighborhoods supported by SIFT.
+            # constrain DCT
             support_kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE,
                 (21, 21)
@@ -354,15 +335,7 @@ def compute_confidence_score(sift_valid_clusters: list,
                              min_cluster_matches: int = 5,
                              ela_score: float = 0.0,
                              ela_weight: float = 0.22) -> float:
-    """Compute a continuous forgery confidence score in [0.0, 1.0].
-
-    Factors considered:
-        1. SIFT cluster evidence (count and size)
-        2. DCT cluster evidence (count and size)
-        3. SIFT + DCT agreement bonus
-        4. Number and size of detected regions
-        5. Penalty for suspiciously large regions (likely false positives)
-        6. ELA evidence bonus for compression-artifact inconsistencies
+    """Compute confidence score.
 
     Args:
         sift_valid_clusters: Valid SIFT cluster IDs.
@@ -387,45 +360,45 @@ def compute_confidence_score(sift_valid_clusters: list,
     if n_regions == 0:
         return 0.0
 
-    # --- Factor 1: SIFT cluster evidence (0.0 – 0.40) --------------------
+    # compute SIFT score
     if n_sift > 0:
-        # Base score for having SIFT clusters
+        # apply base score
         sift_base = min(0.20, 0.10 * n_sift)
-        # Bonus for large clusters (saturates at 40 matches)
+        # apply size bonus
         sift_size_bonus = min(0.20, 0.20 * (sift_largest_cluster_size /
                                              max(40, min_cluster_matches)))
         score += sift_base + sift_size_bonus
 
-    # --- Factor 2: DCT cluster evidence (0.0 – 0.25) --------------------
+    # compute DCT score
     if n_dct > 0:
         dct_base = min(0.10, 0.05 * n_dct)
         dct_size_bonus = min(0.15, 0.15 * (dct_largest_cluster_size /
                                             max(80, min_cluster_matches)))
         score += dct_base + dct_size_bonus
 
-    # --- Factor 3: SIFT + DCT agreement (0.0 – 0.15) --------------------
+    # multi-method bonus
     if n_sift > 0 and n_dct > 0:
-        score += 0.15  # Both methods agree = strong signal
+        score += 0.15
 
-    # --- Factor 4: Region quality (0.0 – 0.20) --------------------------
+    # check region quality
     h, w = image_shape[:2]
     image_area = max(1, h * w)
     total_region_area = sum(r["area"] for r in regions)
     region_fraction = total_region_area / image_area
 
     if 0.001 < region_fraction < 0.40:
-        # Reasonable region size — good signal
+        # add region score
         region_score = min(0.15, 0.05 * n_regions)
         score += region_score
     elif region_fraction >= 0.40:
-        # Suspiciously large detection — penalize
+        # penalize large region
         score *= 0.5
 
-    # Bonus for having exactly 2 well-separated regions (typical copy-move)
+    # check pairs
     if n_regions == 2:
         score += 0.05
 
-    # --- Factor 5: ELA evidence bonus (0.0 – 0.20) ---------------------
+    # add ELA bonus
     if ela_score > 0:
         score += min(0.20, max(0.0, ela_weight) * ela_score)
 
@@ -512,7 +485,7 @@ def localize_forgery(image_shape: tuple,
         dilation_kernel_size, dilation_iterations
     )
 
-    # Use a tighter DCT dilation footprint for better spatial precision.
+    # adjust footprint
     dct_kernel_size = max(5, dilation_kernel_size // 2)
     dct_dilation_iterations = max(1, dilation_iterations - 2)
 
@@ -521,7 +494,7 @@ def localize_forgery(image_shape: tuple,
         dct_kernel_size, dct_dilation_iterations
     )
 
-    # Fallback for callers that provide cluster IDs but not explicit sizes.
+    # fallback handling
     if sift_largest_cluster_size <= 0 and sift_valid_clusters:
         sift_largest_cluster_size = min_cluster_matches
     if dct_largest_cluster_size <= 0 and dct_valid_clusters:
@@ -539,13 +512,12 @@ def localize_forgery(image_shape: tuple,
         dct_min_top2_share=dct_min_top2_share,
     )
 
-    # Apply a small close operation to improve region continuity.
+    # apply close
     merged_mask = refine_forgery_mask(merged_mask, close_kernel_size=5)
 
     regions = find_forged_regions(merged_mask, min_area)
 
-    # ELA branch for compressed-forgery cues. Used conservatively to avoid
-    # texture-heavy false positives when sparse-feature evidence is absent.
+    # handle ELA cues
     ela_score = 0.0
     if enable_ela and image_bgr is not None and image_bgr.size > 0:
         ela_mask, ela_regions, ela_score, ela_region_fraction = extract_ela_evidence(
@@ -580,7 +552,7 @@ def localize_forgery(image_shape: tuple,
                     jaccard >= ela_min_dct_jaccard
                 )
 
-        # ELA-only fallback: require high confidence + multiple localized regions.
+        # ELA fallback
         if (not regions and ela_score >= ela_detection_threshold and
                 len(ela_regions) >= max(1, ela_min_regions) and
                 ela_region_fraction <= ela_max_region_fraction and
@@ -595,7 +567,7 @@ def localize_forgery(image_shape: tuple,
                     f"ovr={overlap_ratio:.3f}, jac={jaccard:.3f}"
                 )
 
-    # Compute confidence score
+    # get confidence
     confidence = compute_confidence_score(
         sift_valid_clusters, sift_largest_cluster_size,
         dct_valid_clusters, dct_largest_cluster_size,

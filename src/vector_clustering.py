@@ -19,11 +19,7 @@ logger = logging.getLogger("cmfd")
 
 
 def compute_direction_variance(vectors: np.ndarray) -> float:
-    """Compute angular spread (radians) for displacement vectors.
-
-    Uses circular angle differences around the circular mean so values stay
-    stable near the -pi/pi wrap-around.
-    """
+    """Compute angular spread."""
     if len(vectors) == 0:
         return float("inf")
 
@@ -40,10 +36,7 @@ def cluster_vectors(displacements: np.ndarray,
                     max_variance: float = 20.0,
                     angle_variance_threshold: float = 0.6,
                     min_vector_distance: float = 25.0) -> tuple:
-    """Cluster displacement vectors using DBSCAN.
-
-    Groups similar displacement vectors together. Genuine copy-move
-    forgery produces tight clusters of consistent displacement vectors.
+    """Cluster displacement vectors.
 
     Args:
         displacements: Array of shape (M, 2) with (dx, dy) vectors.
@@ -69,8 +62,7 @@ def cluster_vectors(displacements: np.ndarray,
                      f"(need {min_samples})")
         return np.full(len(displacements), -1, dtype=int), [], {}
 
-    # Guard against extremely large input (e.g., tiled/patterned images).
-    # DBSCAN's memory usage is O(n²) for distance matrix computation.
+    # guard against large input
     MAX_VECTORS_FOR_DBSCAN = 10000
     EXTREME_MATCH_THRESHOLD = 100000
 
@@ -98,15 +90,15 @@ def cluster_vectors(displacements: np.ndarray,
     else:
         displacements_subset = displacements
 
-    # Run DBSCAN
+    # run clustering
     db = DBSCAN(eps=eps, min_samples=min_samples)
     subset_labels = db.fit_predict(displacements_subset)
 
-    # Map subsampled labels back to full-length array
+    # map cluster labels
     if subsample_indices is not None:
         labels = np.full(original_length, -1, dtype=int)
         labels[subsample_indices] = subset_labels
-        # Use original full displacements for cluster analysis below
+        # store labels
     else:
         labels = subset_labels
 
@@ -134,21 +126,21 @@ def cluster_vectors(displacements: np.ndarray,
             "vector_length": vector_length,
         }
 
-        # Filter by size (Improvement #3)
+        # filter by size
         if size < min_cluster_size:
             logger.debug(f"Cluster {cluster_id}: rejected — too small "
                          f"({size} < {min_cluster_size})")
             labels[mask] = -1
             continue
 
-        # Filter by variance
+        # filter by variance
         if variance > max_variance:
             logger.debug(f"Cluster {cluster_id}: rejected — high variance "
                          f"({variance:.1f} > {max_variance})")
             labels[mask] = -1
             continue
 
-        # Reject if direction spread is too wide.
+        # check direction spread
         if direction_variance > angle_variance_threshold:
             logger.debug(
                 f"Cluster {cluster_id}: rejected — high angle variance "
@@ -157,7 +149,7 @@ def cluster_vectors(displacements: np.ndarray,
             labels[mask] = -1
             continue
 
-        # Reject if source-copy separation is too small.
+        # check min distance
         if vector_length < min_vector_distance:
             logger.debug(
                 f"Cluster {cluster_id}: rejected — short displacement "
@@ -222,7 +214,7 @@ def cluster_sift_vectors(displacements: np.ndarray,
         empty = np.array([]).reshape(0, 2)
         return empty, empty, labels, valid_clusters, cluster_info
 
-    # Extract points from valid clusters
+    # extract points
     valid_mask = np.isin(labels, valid_clusters)
     filtered_pts1 = points1[valid_mask]
     filtered_pts2 = points2[valid_mask]

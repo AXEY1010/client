@@ -76,9 +76,7 @@ def process_image(image_path: str,
         "output_path": "",
     }
 
-    # =========================================================================
-    # Step 1: Load & Preprocess
-    # =========================================================================
+    # load and preprocess
     logger.info(f"Processing: {image_path}")
 
     raw_image = load_image(image_path)
@@ -99,10 +97,7 @@ def process_image(image_path: str,
     h, w = gray.shape
     logger.info(f"Image size: {w}x{h}")
 
-    # =========================================================================
-    # Step 2–4: DCT Feature Extraction, Matching & Clustering
-    #           (optionally multi-scale)
-    # =========================================================================
+    # extract DCT features
     all_dct_matched_pairs = []
     all_dct_displacements = []
     all_dct_filtered_pairs = []
@@ -135,7 +130,7 @@ def process_image(image_path: str,
         if len(_displ) > 0:
             all_dct_displacements.append(_displ)
 
-    # Combine multi-scale displacements
+    # combine displacements
     if all_dct_displacements:
         dct_displacements = np.concatenate(all_dct_displacements, axis=0)
     else:
@@ -155,9 +150,7 @@ def process_image(image_path: str,
             min_vector_distance=cfg.DCT_MIN_VECTOR_DISTANCE,
         )
 
-    # =========================================================================
-    # Step 5: SIFT Feature Extraction & Matching
-    # =========================================================================
+    # extract SIFT matches
     with timer("SIFT extraction & matching", logger):
         (keypoints, match_pairs,
          sift_pts1, sift_pts2, sift_displacements) = extract_sift_matches(
@@ -179,9 +172,7 @@ def process_image(image_path: str,
             orb_ratio_threshold=cfg.ORB_RATIO_TEST,
         )
 
-    # =========================================================================
-    # Step 6: SIFT Vector Clustering
-    # =========================================================================
+    # cluster SIFT vectors
     with timer("SIFT vector clustering", logger):
         (sift_filtered_pts1, sift_filtered_pts2,
          sift_labels, sift_valid_clusters,
@@ -204,9 +195,7 @@ def process_image(image_path: str,
         default=0,
     )
 
-    # =========================================================================
-    # Step 7: Forgery Localization
-    # =========================================================================
+    # localize forgery
     with timer("Forgery localization", logger):
         (merged_mask, regions, forgery_detected,
          sift_mask, dct_mask, confidence) = localize_forgery(
@@ -239,9 +228,7 @@ def process_image(image_path: str,
             ela_min_dct_jaccard=cfg.ELA_MIN_DCT_JACCARD,
         )
 
-    # =========================================================================
-    # Step 8: Visualization
-    # =========================================================================
+    # generate overlays
     with timer("Visualization", logger):
         output_image = draw_detection_overlay(
             image, merged_mask, sift_mask, dct_mask, regions,
@@ -260,9 +247,7 @@ def process_image(image_path: str,
                                     f"{basename}_detected.png")
         save_output(output_image, output_path)
 
-    # =========================================================================
-    # Step 9: Debug Outputs
-    # =========================================================================
+    # save debug output
     if debug:
         with timer("Debug outputs", logger):
             save_debug_outputs(
@@ -274,9 +259,7 @@ def process_image(image_path: str,
                 debug_dir, prefix=f"{basename}_",
             )
 
-    # =========================================================================
-    # Step 10: Results
-    # =========================================================================
+    # compute results
     elapsed = time.perf_counter() - start_time
 
     result.update({
@@ -295,7 +278,7 @@ def process_image(image_path: str,
         import cv2
         gt_mask = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
         if gt_mask is not None:
-            # Resize ground truth to match processed image size
+            # resize to match image
             if gt_mask.shape != gray.shape:
                 gt_mask = cv2.resize(gt_mask, (w, h))
             metrics = compute_metrics(merged_mask, gt_mask)
@@ -304,7 +287,7 @@ def process_image(image_path: str,
                         f"Recall: {metrics['recall']:.4f}, "
                         f"F1: {metrics['f1']:.4f}")
 
-    # Print summary
+    # print summary
     status = "YES" if forgery_detected else "NO"
     print(f"\n{'='*60}")
     print(f"  Image: {os.path.basename(image_path)}")
@@ -364,12 +347,12 @@ def batch_process(dataset_dir: str,
                 "processing_time": 0.0,
             })
 
-    # Save summary CSV
+    # save summary csv
     csv_path = os.path.join(output_dir, "results_summary.csv")
     save_results_csv(results, csv_path)
     logger.info(f"Batch results saved to {csv_path}")
 
-    # Print aggregate summary
+    # print dataset summary
     detected = sum(1 for r in results if r.get("forgery_detected"))
     total_time = sum(r.get("processing_time", 0) for r in results)
     errors = sum(1 for r in results if "error" in r)
@@ -385,7 +368,7 @@ def batch_process(dataset_dir: str,
     print(f"  Total time:         {total_time:.1f}s")
     print(f"  Avg time/image:     {total_time/max(len(results),1):.1f}s")
 
-    # Aggregate metrics if available
+    # aggregate metrics
     metric_results = [r for r in results if "accuracy" in r]
     if metric_results:
         avg_accuracy = np.mean([r["accuracy"] for r in metric_results])
@@ -435,10 +418,10 @@ Examples:
 
     args = parser.parse_args()
 
-    # Determine max image size
+    # determine max size
     max_size = None if args.full_resolution else cfg.MAX_IMAGE_SIZE
 
-    # Override debug mode and output dir
+    # setup debug mode
     if args.debug:
         cfg.DEBUG_MODE = True
     if args.output_dir:
