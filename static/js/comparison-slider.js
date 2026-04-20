@@ -10,6 +10,7 @@
     'use strict';
 
     const container = document.getElementById('comparisonSlider');
+    const canvas    = document.getElementById('compCanvas');
     const fallback  = document.getElementById('comparisonFallback');
     const slider    = document.getElementById('compSliderRange');
     const overlay   = document.getElementById('compOverlay');
@@ -17,7 +18,7 @@
     const labelL    = document.getElementById('labelOriginal');
     const labelR    = document.getElementById('labelDetected');
 
-    if (!container || !slider || !overlay) return; // graceful no-op
+    if (!container || !canvas || !slider || !overlay || !divider) return; // graceful no-op
 
     /* ---- Show slider / hide fallback ---- */
     container.classList.remove('hidden');
@@ -42,8 +43,10 @@
     let dragging = false;
 
     function pctFromEvent(e) {
-        const rect = container.getBoundingClientRect();
-        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width) return parseFloat(slider.value) || 50;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const x = clientX - rect.left;
         return (x / rect.width) * 100;
     }
 
@@ -60,14 +63,16 @@
     function onEnd() { dragging = false; }
 
     divider.addEventListener('pointerdown', onStart);
-    container.addEventListener('pointerdown', onStart);
+    canvas.addEventListener('pointerdown', onStart);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onEnd);
 
     // Touch support
-    container.addEventListener('touchstart', onStart, { passive: false });
+    canvas.addEventListener('touchstart', onStart, { passive: false });
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onEnd);
+
+    window.addEventListener('resize', () => update(parseFloat(slider.value)));
 
     /* ---- Initial position ---- */
     update(50);

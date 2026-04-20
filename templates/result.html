@@ -24,25 +24,97 @@
             border: 1px solid rgba(13, 47, 86, 0.15);
             background: rgba(255, 255, 255, 0.88);
             box-shadow: var(--shadow-md);
+            width: fit-content;
+            max-width: min(96vw, 1140px);
+            margin-inline: auto;
         }
 
-        .comparison-container img {
+        .result-summary-card {
+            max-width: 1140px;
+            margin-inline: auto;
+        }
+
+        .result-summary-card .fx-card-body {
+            padding: 0.8rem 1rem;
+        }
+
+        .result-summary-card .fx-title {
+            margin-top: 0.4rem !important;
+            font-size: clamp(1.45rem, 2.05vw, 2.15rem);
+            line-height: 1.1;
+        }
+
+        .result-summary-card .fx-subtext {
+            margin-top: 0.24rem !important;
+            font-size: 0.93rem;
+        }
+
+        .result-summary-card .fx-metric-strip {
+            margin-top: 0.5rem;
+            gap: 0.5rem;
+        }
+
+        .result-summary-card .fx-metric-cell {
+            padding: 0.5rem 0.58rem;
+        }
+
+        .result-summary-card .fx-metric-name {
+            font-size: 0.67rem;
+        }
+
+        .result-summary-card .fx-metric-value {
+            margin-top: 0.15rem;
+            font-size: 1rem;
+        }
+
+        .summary-confidence {
+            margin-top: 0.5rem;
+        }
+
+        .summary-confidence .fx-info-title {
+            display: none;
+        }
+
+        .comp-stage {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.35rem;
+            min-height: clamp(370px, 74vh, 920px);
+            background: rgba(241, 245, 249, 0.7);
+        }
+
+        .comp-canvas {
+            position: relative;
+            width: fit-content;
+            max-width: 100%;
+            line-height: 0;
+        }
+
+        .comp-canvas > img {
             display: block;
-            width: 100%;
+            width: auto;
             height: auto;
+            max-width: 100%;
+            max-height: clamp(340px, 80vh, 860px);
+            object-fit: contain;
             pointer-events: none;
+            border-radius: 12px;
         }
 
         .comp-overlay {
             position: absolute;
             inset: 0;
             clip-path: inset(0 50% 0 0);
+            overflow: hidden;
+            border-radius: 12px;
         }
 
         .comp-overlay img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: fill;
+            border-radius: 12px;
         }
 
         .comp-divider {
@@ -150,6 +222,33 @@
             .fx-metric-strip {
                 grid-template-columns: 1fr;
             }
+
+            .result-summary-card .fx-card-body {
+                padding: 0.75rem 0.78rem;
+            }
+
+            .result-summary-card .fx-title {
+                font-size: clamp(1.4rem, 6.6vw, 1.9rem);
+            }
+
+            .comp-stage {
+                min-height: clamp(300px, 62vh, 620px);
+                padding: 0.3rem;
+            }
+
+            .comp-canvas > img {
+                max-height: clamp(280px, 64vh, 580px);
+            }
+        }
+
+        @media (max-height: 780px) {
+            .comp-stage {
+                min-height: clamp(320px, 68vh, 660px);
+            }
+
+            .comp-canvas > img {
+                max-height: clamp(300px, 72vh, 640px);
+            }
         }
     </style>
 </head>
@@ -174,22 +273,22 @@
             </div>
         </header>
 
-        <section class="fx-card fx-reveal-delay-1">
+        <section class="fx-card fx-reveal-delay-1 result-summary-card">
             <div class="fx-card-body">
                 {% if forgery_detected %}
                 <span class="fx-pill" style="border-color: rgba(220, 38, 38, 0.35); color: #9f1239; background: rgba(254, 226, 226, 0.85);">
                     <span class="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
                     Forgery detected
                 </span>
-                <h1 class="fx-title fx-status-positive" style="margin-top: 0.7rem;">Suspicious Copy-Move Activity Found</h1>
-                <p class="fx-subtext" style="margin-top: 0.55rem;">The pipeline identified duplication patterns consistent with tampering.</p>
+                <h1 class="fx-title fx-status-positive" style="margin-top: 0.45rem;">Suspicious Copy-Move Activity Found</h1>
+                <p class="fx-subtext" style="margin-top: 0.28rem;">The pipeline identified duplication patterns consistent with tampering.</p>
                 {% else %}
                 <span class="fx-pill" style="border-color: rgba(22, 163, 74, 0.35); color: #166534; background: rgba(220, 252, 231, 0.85);">
                     <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
                     No forgery detected
                 </span>
-                <h1 class="fx-title fx-status-negative" style="margin-top: 0.7rem;">No Copy-Move Evidence Identified</h1>
-                <p class="fx-subtext" style="margin-top: 0.55rem;">The image appears authentic according to current detection settings.</p>
+                <h1 class="fx-title fx-status-negative" style="margin-top: 0.45rem;">No Copy-Move Evidence Identified</h1>
+                <p class="fx-subtext" style="margin-top: 0.28rem;">The image appears authentic according to current detection settings.</p>
                 {% endif %}
 
                 <div class="fx-metric-strip">
@@ -207,12 +306,12 @@
                     </div>
                 </div>
 
-                <div style="margin-top: 0.9rem;">
+                <div class="summary-confidence">
                     <p class="fx-info-title">Confidence Profile</p>
-                    <div style="margin-top: 0.45rem; width: 100%; height: 10px; border-radius: 999px; background: rgba(23, 52, 90, 0.12); overflow: hidden;">
+                    <div style="margin-top: 0.2rem; width: 100%; height: 10px; border-radius: 999px; background: rgba(23, 52, 90, 0.12); overflow: hidden;">
                         <div style="height: 100%; width: {{ "%.0f"|format(confidence * 100) }}%; border-radius: 999px; background: {% if confidence >= 0.7 %}linear-gradient(90deg, #ef4444, #dc2626){% elif confidence >= 0.4 %}linear-gradient(90deg, #f59e0b, #d97706){% else %}linear-gradient(90deg, #22c55e, #16a34a){% endif %};"></div>
                     </div>
-                    <p class="fx-subtext" style="margin-top: 0.4rem; font-size: 0.82rem;">
+                    <p class="fx-subtext" style="margin-top: 0.22rem; font-size: 0.78rem;">
                         {% if confidence >= 0.7 %}High-confidence tampering signal
                         {% elif confidence >= 0.4 %}Moderate signal, manual review recommended
                         {% elif confidence > 0 %}Low signal, likely authentic but review advised
@@ -223,24 +322,26 @@
         </section>
 
         <section id="comparisonSlider" class="hidden comparison-container fx-reveal-delay-2" style="margin-top: 1rem;">
-            <div class="px-4 py-3 border-b border-slate-200/70 flex items-center justify-between gap-2">
+            <div class="px-4 py-2 border-b border-slate-200/70 flex items-center justify-between gap-2">
                 <h2 class="font-semibold text-slate-800">Interactive Before/After Comparator</h2>
                 <span class="text-xs text-slate-500">Drag handle to inspect differences</span>
             </div>
 
-            <div class="relative bg-slate-100/70">
-                <img src="{{ url_for('static', filename=original_url.replace('static/', '')) }}" alt="Original uploaded image" />
+            <div class="comp-stage">
+                <div id="compCanvas" class="comp-canvas">
+                    <img src="{{ url_for('static', filename=original_url.replace('static/', '')) }}" alt="Original uploaded image" />
 
-                <div id="compOverlay" class="comp-overlay">
-                    <img src="{{ url_for('static', filename=output_url.replace('static/', '')) }}" alt="Forgery detection output" />
+                    <div id="compOverlay" class="comp-overlay">
+                        <img src="{{ url_for('static', filename=output_url.replace('static/', '')) }}" alt="Forgery detection output" />
+                    </div>
+
+                    <div id="compDivider" class="comp-divider"></div>
+
+                    <span id="labelOriginal" class="comp-label comp-label-left">Original</span>
+                    <span id="labelDetected" class="comp-label comp-label-right">Detected</span>
+
+                    <input type="range" id="compSliderRange" class="comp-range" min="0" max="100" value="50" aria-label="Comparison slider" />
                 </div>
-
-                <div id="compDivider" class="comp-divider"></div>
-
-                <span id="labelOriginal" class="comp-label comp-label-left">Original</span>
-                <span id="labelDetected" class="comp-label comp-label-right">Detected</span>
-
-                <input type="range" id="compSliderRange" class="comp-range" min="0" max="100" value="50" aria-label="Comparison slider" />
             </div>
         </section>
 
