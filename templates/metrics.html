@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forensic Metrics Command Center</title>
+    <meta name="description" content="Advanced dataset dashboard for forgery detection performance metrics and operational insights." />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-pro.css') }}" />
+</head>
+
+<body class="site-shell">
+    <main class="fx-page">
+        <header class="fx-topbar fx-reveal">
+            <div class="fx-brand">
+                <span class="fx-brand-badge" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13h6v8H3v-8zm12-10h6v18h-6V3zM9 8h6v13H9V8z" />
+                    </svg>
+                </span>
+                <div>
+                    <div class="fx-brand-title">Forensic Metrics Command Center</div>
+                    <div class="fx-brand-subtitle">Dataset-scale detection intelligence and quality analytics</div>
+                    <span class="hidden">Dataset Metrics Dashboard</span>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                <a href="{{ url_for('index') }}" class="fx-btn fx-btn-secondary">Back To Upload</a>
+                <a href="{{ url_for('metrics_dashboard') }}" class="fx-btn fx-btn-primary">Refresh Dashboard</a>
+            </div>
+        </header>
+
+        {% if dataset_summaries|length == 0 %}
+        <section class="fx-card fx-reveal-delay-1">
+            <div class="fx-card-body" style="text-align: center;">
+                <h2 class="hidden">No dataset summaries were found</h2>
+                <p class="fx-pill" style="margin: 0 auto; width: fit-content;">No CSV summary detected</p>
+                <h2 style="font-family: Sora, Plus Jakarta Sans, sans-serif; margin: 0.75rem 0 0; font-size: 1.6rem;">Run Batch Evaluation First</h2>
+                <p class="fx-subtext" style="margin-top: 0.7rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+                    This dashboard reads output/*/results_summary.csv files. Execute your dataset pipeline to generate summaries,
+                    then reload this page for automatic metric computation.
+                </p>
+                <div class="fx-card-soft" style="margin-top: 1rem; padding: 0.9rem; width: min(760px, 100%); margin-left: auto; margin-right: auto; text-align: left; overflow-x: auto;">
+                    <code class="text-sm text-slate-700">python main.py --dataset dataset/MICC_F220</code>
+                </div>
+            </div>
+        </section>
+        {% else %}
+
+        <section class="fx-metrics-row fx-reveal-delay-1">
+            <article class="fx-kpi">
+                <p class="fx-kpi-label">Datasets</p>
+                <p class="fx-kpi-value">{{ dashboard_payload.summary.dataset_count }}</p>
+                <p class="fx-kpi-caption">Active result groups</p>
+            </article>
+            <article class="fx-kpi">
+                <p class="fx-kpi-label">Images</p>
+                <p class="fx-kpi-value">{{ dashboard_payload.summary.total_images }}</p>
+                <p class="fx-kpi-caption">Total rows in summaries</p>
+            </article>
+            <article class="fx-kpi">
+                <p class="fx-kpi-label">Labeled</p>
+                <p class="fx-kpi-value">{{ dashboard_payload.summary.total_labeled }}</p>
+                <p class="fx-kpi-caption">Rows with inferred ground truth</p>
+            </article>
+            <article class="fx-kpi">
+                <p class="fx-kpi-label">Overall F1</p>
+                {% if dashboard_payload.summary.overall_classification %}
+                <p class="fx-kpi-value">{{ "%.1f"|format(dashboard_payload.summary.overall_classification.f1 * 100) }}%</p>
+                {% else %}
+                <p class="fx-kpi-value">N/A</p>
+                {% endif %}
+                <p class="fx-kpi-caption">Global image-level quality</p>
+            </article>
+        </section>
+
+        <section class="fx-hero-grid fx-reveal-delay-2" style="margin-top: 1rem;">
+            <article class="fx-card-soft">
+                <div class="fx-card-body">
+                    <p class="fx-info-title">Overall Classification Pulse</p>
+                    {% if dashboard_payload.summary.overall_classification %}
+                    <div class="fx-info-grid" style="margin-top: 0.7rem;">
+                        <div class="fx-info-item">
+                            <p class="fx-info-title">Accuracy</p>
+                            <p class="fx-info-value">{{ "%.1f"|format(dashboard_payload.summary.overall_classification.accuracy * 100) }}%</p>
+                        </div>
+                        <div class="fx-info-item">
+                            <p class="fx-info-title">Precision</p>
+                            <p class="fx-info-value">{{ "%.1f"|format(dashboard_payload.summary.overall_classification.precision * 100) }}%</p>
+                        </div>
+                        <div class="fx-info-item">
+                            <p class="fx-info-title">Recall</p>
+                            <p class="fx-info-value">{{ "%.1f"|format(dashboard_payload.summary.overall_classification.recall * 100) }}%</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="fx-subtext" style="margin-top: 0.6rem;">No global classification metrics available for current rows.</p>
+                    {% endif %}
+                </div>
+            </article>
+
+            <article class="fx-card-soft">
+                <div class="fx-card-body">
+                    <p class="fx-info-title">Top Performing Dataset</p>
+                    {% if dashboard_payload.summary.best_dataset %}
+                    <h3 style="font-family: Sora, Plus Jakarta Sans, sans-serif; font-size: 1.35rem; margin: 0.45rem 0 0; color: #0a2345;">
+                        {{ dashboard_payload.summary.best_dataset.name }}
+                    </h3>
+                    <p class="fx-subtext" style="margin-top: 0.4rem;">
+                        F1 {{ "%.1f"|format(dashboard_payload.summary.best_dataset.f1 * 100) }}% ·
+                        Accuracy {{ "%.1f"|format(dashboard_payload.summary.best_dataset.accuracy * 100) }}%
+                    </p>
+                    {% else %}
+                    <p class="fx-subtext" style="margin-top: 0.6rem;">No best dataset can be computed yet.</p>
+                    {% endif %}
+                </div>
+            </article>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-4" style="margin-top: 1rem;">
+            <article class="fx-chart-card">
+                <p class="fx-info-title">Detection Rate vs Confidence</p>
+                <p class="fx-subtext" style="margin-top: 0.35rem;">Dataset-level trend of predicted forgery rate compared with confidence signal.</p>
+                <div class="fx-chart-wrap-sm" style="margin-top: 0.65rem;">
+                    <canvas id="detectionConfidenceChart"></canvas>
+                </div>
+            </article>
+
+            <article class="fx-chart-card">
+                <p class="fx-info-title">Classification Radar</p>
+                <p class="fx-subtext" style="margin-top: 0.35rem;">Accuracy, precision, recall, and F1 profile for each dataset.</p>
+                <div class="fx-chart-wrap-sm" style="margin-top: 0.65rem;">
+                    <canvas id="overviewRadarChart"></canvas>
+                </div>
+            </article>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-2 gap-4" style="margin-top: 1rem;">
+            {% for dataset_name in dashboard_payload.chart_data.labels %}
+            <article class="fx-chart-card">
+                <p class="fx-info-title">{{ dataset_name }}</p>
+                <p class="fx-subtext" style="margin-top: 0.35rem;">Per-dataset classification metrics (image-level).</p>
+                <div class="fx-chart-wrap" style="margin-top: 0.65rem;">
+                    <canvas class="dataset-classification-chart" data-dataset-name="{{ dataset_name }}" data-dataset-index="{{ loop.index0 }}"></canvas>
+                </div>
+            </article>
+            {% endfor %}
+        </section>
+
+        <section class="fx-card-soft" style="margin-top: 1rem;">
+            <div class="fx-card-body">
+                <p class="fx-info-title">Dataset Classification Summary</p>
+                <p class="fx-subtext" style="margin-top: 0.35rem;">Computed from predicted forgery decisions against inferred forged/original labels.</p>
+
+                <div class="fx-table-wrap" style="margin-top: 0.8rem;">
+                    <table class="fx-table">
+                        <thead>
+                            <tr>
+                                <th>Dataset</th>
+                                <th>Rows</th>
+                                <th>Labeled</th>
+                                <th>TP</th>
+                                <th>FP</th>
+                                <th>FN</th>
+                                <th>TN</th>
+                                <th>Accuracy</th>
+                                <th>Precision</th>
+                                <th>Recall</th>
+                                <th>F1</th>
+                                <th>Avg Confidence</th>
+                                <th>Avg Time (s)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ds in dataset_summaries %}
+                            <tr>
+                                <td>
+                                    <strong>{{ ds.dataset_name }}</strong>
+                                </td>
+                                <td>{{ ds.rows_total }}</td>
+                                <td>{{ ds.rows_labeled }}</td>
+                                <td>{{ ds.tp }}</td>
+                                <td>{{ ds.fp }}</td>
+                                <td>{{ ds.fn }}</td>
+                                <td>{{ ds.tn }}</td>
+                                {% if ds.classification_metrics %}
+                                <td>{{ "%.1f"|format(ds.classification_metrics.accuracy * 100) }}%</td>
+                                <td>{{ "%.1f"|format(ds.classification_metrics.precision * 100) }}%</td>
+                                <td>{{ "%.1f"|format(ds.classification_metrics.recall * 100) }}%</td>
+                                <td>
+                                    {% if ds.classification_metrics.f1 >= 0.85 %}
+                                    <span class="fx-tag fx-tag-good">{{ "%.1f"|format(ds.classification_metrics.f1 * 100) }}%</span>
+                                    {% elif ds.classification_metrics.f1 >= 0.65 %}
+                                    <span class="fx-tag fx-tag-mid">{{ "%.1f"|format(ds.classification_metrics.f1 * 100) }}%</span>
+                                    {% else %}
+                                    <span class="fx-tag fx-tag-low">{{ "%.1f"|format(ds.classification_metrics.f1 * 100) }}%</span>
+                                    {% endif %}
+                                </td>
+                                {% else %}
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                {% endif %}
+
+                                {% if ds.avg_confidence is not none %}
+                                <td>{{ "%.1f"|format(ds.avg_confidence * 100) }}%</td>
+                                {% else %}
+                                <td>N/A</td>
+                                {% endif %}
+
+                                {% if ds.avg_processing_time is not none %}
+                                <td>{{ "%.3f"|format(ds.avg_processing_time) }}</td>
+                                {% else %}
+                                <td>N/A</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        {% set ns = namespace(has_pixel_metrics=false) %}
+        {% for ds in dataset_summaries %}
+            {% if ds.pixel_metrics %}
+                {% set ns.has_pixel_metrics = true %}
+            {% endif %}
+        {% endfor %}
+
+        {% if ns.has_pixel_metrics %}
+        <section class="fx-card-soft" style="margin-top: 1rem;">
+            <div class="fx-card-body">
+                <p class="fx-info-title">Pixel-Level Metrics</p>
+                <p class="fx-subtext" style="margin-top: 0.35rem;">Averages from row-level accuracy/precision/recall/F1 fields when available in CSV data.</p>
+
+                <div class="fx-table-wrap" style="margin-top: 0.8rem;">
+                    <table class="fx-table" style="min-width: 760px;">
+                        <thead>
+                            <tr>
+                                <th>Dataset</th>
+                                <th>Rows With Pixel Metrics</th>
+                                <th>Avg Accuracy</th>
+                                <th>Avg Precision</th>
+                                <th>Avg Recall</th>
+                                <th>Avg F1</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ds in dataset_summaries %}
+                            <tr>
+                                <td><strong>{{ ds.dataset_name }}</strong></td>
+                                <td>{{ ds.pixel_metric_count }}</td>
+                                {% if ds.pixel_metrics %}
+                                <td>{{ "%.1f"|format(ds.pixel_metrics.accuracy * 100) if ds.pixel_metrics.accuracy is not none else 'N/A' }}</td>
+                                <td>{{ "%.1f"|format(ds.pixel_metrics.precision * 100) if ds.pixel_metrics.precision is not none else 'N/A' }}</td>
+                                <td>{{ "%.1f"|format(ds.pixel_metrics.recall * 100) if ds.pixel_metrics.recall is not none else 'N/A' }}</td>
+                                <td>{{ "%.1f"|format(ds.pixel_metrics.f1 * 100) if ds.pixel_metrics.f1 is not none else 'N/A' }}</td>
+                                {% else %}
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% endif %}
+
+        <footer class="fx-footer">Copy-Move Forgery Detection · Professional metrics view</footer>
+    </main>
+
+    <script id="chartPayload" type="application/json">{{ dashboard_payload | tojson }}</script>
+    <script src="{{ url_for('static', filename='js/metrics-dashboard.js') }}"></script>
+</body>
+</html>

@@ -3,70 +3,48 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Detection Result — Copy-Move Forgery Detection</title>
+    <title>Detection Result - Forensic Studio</title>
     <meta name="description" content="View the forgery detection result for the uploaded image." />
 
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Google Font: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                },
-            },
-        };
-    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-pro.css') }}" />
 
     <style>
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(24px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .animate-in {
-            animation: fadeInUp 0.5s ease-out both;
-        }
-        .animate-in-delay {
-            animation: fadeInUp 0.5s ease-out 0.12s both;
-        }
-        .animate-in-delay-2 {
-            animation: fadeInUp 0.5s ease-out 0.24s both;
-        }
-
-        /* ---- Comparison slider ---- */
         .comparison-container {
             position: relative;
             overflow: hidden;
-            touch-action: none;          /* prevent scroll while dragging */
+            touch-action: none;
             user-select: none;
             cursor: col-resize;
+            border-radius: 16px;
+            border: 1px solid rgba(13, 47, 86, 0.15);
+            background: rgba(255, 255, 255, 0.88);
+            box-shadow: var(--shadow-md);
         }
+
         .comparison-container img {
             display: block;
             width: 100%;
             height: auto;
-            pointer-events: none;        /* images shouldn't eat clicks */
+            pointer-events: none;
         }
+
         .comp-overlay {
             position: absolute;
             inset: 0;
-            clip-path: inset(0 50% 0 0); /* JS will update this */
+            clip-path: inset(0 50% 0 0);
         }
+
         .comp-overlay img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
 
-        /* Divider line + handle */
         .comp-divider {
             position: absolute;
             top: 0; bottom: 0;
@@ -79,6 +57,7 @@
             pointer-events: auto;
             cursor: col-resize;
         }
+
         .comp-divider::after {
             content: '';
             position: absolute;
@@ -90,8 +69,8 @@
             border-radius: 50%;
             background: white;
             box-shadow: 0 2px 8px rgba(0,0,0,.25);
-            /* arrows icon via borders */
         }
+
         .comp-divider::before {
             content: '⟨  ⟩';
             position: absolute;
@@ -106,7 +85,6 @@
             pointer-events: none;
         }
 
-        /* Floating labels */
         .comp-label {
             position: absolute;
             bottom: 12px;
@@ -122,10 +100,10 @@
             pointer-events: none;
             transition: opacity 0.2s;
         }
+
         .comp-label-left  { left: 12px; }
         .comp-label-right { right: 12px; }
 
-        /* Hidden range input (spans the full container, fully transparent) */
         .comp-range {
             position: absolute;
             inset: 0;
@@ -136,199 +114,169 @@
             cursor: col-resize;
             z-index: 25;
         }
+
+        .fx-metric-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.7rem;
+            margin-top: 1rem;
+        }
+
+        .fx-metric-cell {
+            border: 1px solid rgba(17, 53, 96, 0.14);
+            border-radius: 12px;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .fx-metric-name {
+            margin: 0;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #365889;
+            font-weight: 700;
+        }
+
+        .fx-metric-value {
+            margin: 0.3rem 0 0;
+            font-family: "Sora", "Plus Jakarta Sans", sans-serif;
+            font-size: 1.15rem;
+            color: #091f3f;
+            font-weight: 600;
+        }
+
+        @media (max-width: 760px) {
+            .fx-metric-strip {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
-<body class="min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-blue-50 font-sans antialiased">
-
-    <!-- ===== Main Container ===== -->
-    <div class="flex items-start justify-center min-h-screen px-4 py-12">
-        <div class="w-full max-w-4xl space-y-6">
-
-            <!-- ===== Result Badge ===== -->
-            <div class="animate-in">
-                <div class="bg-white rounded-2xl shadow-xl shadow-blue-900/5 p-8 md:p-10 text-center">
-
-                    {% if forgery_detected %}
-                    <!-- Forgery DETECTED -->
-                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-red-600" fill="none"
-                             viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667
-                                  1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34
-                                  16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                    </div>
-                    <h1 class="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
-                        Forgery Detected
-                    </h1>
-                    <p class="mt-2 text-gray-500 text-sm">
-                        Copy-move tampering was found in the uploaded image.
-                    </p>
-                    <div class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-50 border border-red-200">
-                        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                        <span class="text-sm font-semibold text-red-700">YES — Forgery Detected</span>
-                    </div>
-
-                    {% else %}
-                    <!-- NO forgery -->
-                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-emerald-600" fill="none"
-                             viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </div>
-                    <h1 class="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
-                        No Forgery Detected
-                    </h1>
-                    <p class="mt-2 text-gray-500 text-sm">
-                        The analysis did not find copy-move tampering in this image.
-                    </p>
-                    <div class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span class="text-sm font-semibold text-emerald-700">NO — Image appears authentic</span>
-                    </div>
-                    {% endif %}
-
-                    <!-- Stats row -->
-                    <div class="mt-6 flex items-center justify-center gap-8 text-sm text-gray-500">
-                        <div>
-                            <span class="font-semibold text-gray-700">{{ num_regions }}</span> region{{ 's' if num_regions != 1 else '' }} found
-                        </div>
-                        <div class="h-4 w-px bg-gray-200"></div>
-                        <div>
-                            Confidence: <span class="font-semibold {% if confidence >= 0.7 %}text-red-600{% elif confidence >= 0.4 %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ "%.0f"|format(confidence * 100) }}%</span>
-                        </div>
-                        <div class="h-4 w-px bg-gray-200"></div>
-                        <div>
-                            Processed in <span class="font-semibold text-gray-700">{{ processing_time }}s</span>
-                        </div>
-                    </div>
-
-                    <!-- Confidence bar -->
-                    <div class="mt-4 mx-auto max-w-xs">
-                        <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div class="h-full rounded-full transition-all duration-500
-                                {% if confidence >= 0.7 %}bg-red-500{% elif confidence >= 0.4 %}bg-amber-500{% else %}bg-emerald-500{% endif %}"
-                                 style="width: {{ "%.0f"|format(confidence * 100) }}%"></div>
-                        </div>
-                        <p class="mt-1 text-[11px] text-gray-400 text-center">
-                            {% if confidence >= 0.7 %}High confidence of tampering
-                            {% elif confidence >= 0.4 %}Moderate evidence of tampering
-                            {% elif confidence > 0 %}Low evidence — review manually
-                            {% else %}No evidence of copy-move forgery{% endif %}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ===== Before / After Comparison Slider ===== -->
-            <!-- Hidden by default; comparison-slider.js reveals it and hides the fallback -->
-            <div id="comparisonSlider"
-                 class="hidden comparison-container bg-white rounded-2xl shadow-lg shadow-blue-900/5 overflow-hidden animate-in-delay">
-
-                <!-- Header bar -->
-                <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <h2 class="text-sm font-semibold text-gray-700">Before / After Comparison</h2>
-                    <span class="text-[11px] text-gray-400">Drag the slider to compare</span>
-                </div>
-
-                <!-- Image area -->
-                <div class="relative bg-gray-50">
-                    <!-- Base layer: Original -->
-                    <img src="{{ url_for('static', filename=original_url.replace('static/', '')) }}"
-                         alt="Original uploaded image" />
-
-                    <!-- Overlay layer: Detection output (clipped by JS) -->
-                    <div id="compOverlay" class="comp-overlay">
-                        <img src="{{ url_for('static', filename=output_url.replace('static/', '')) }}"
-                             alt="Forgery detection output" />
-                    </div>
-
-                    <!-- Divider line + handle -->
-                    <div id="compDivider" class="comp-divider"></div>
-
-                    <!-- Floating labels -->
-                    <span id="labelOriginal" class="comp-label comp-label-left">Original</span>
-                    <span id="labelDetected" class="comp-label comp-label-right">Detected</span>
-
-                    <!-- Accessible range input (invisible, full-area) -->
-                    <input type="range" id="compSliderRange" class="comp-range"
-                           min="0" max="100" value="50"
-                           aria-label="Comparison slider" />
-                </div>
-            </div>
-
-            <!-- ===== Fallback: Side-by-side grid (shown when JS is off) ===== -->
-            <div id="comparisonFallback" class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in-delay">
-
-                <!-- Original -->
-                <div class="bg-white rounded-2xl shadow-lg shadow-blue-900/5 overflow-hidden">
-                    <div class="px-5 py-3 border-b border-gray-100">
-                        <h2 class="text-sm font-semibold text-gray-700">Original Image</h2>
-                    </div>
-                    <div class="p-4 flex items-center justify-center bg-gray-50 min-h-[280px]">
-                        <img src="{{ url_for('static', filename=original_url.replace('static/', '')) }}"
-                             alt="Original uploaded image"
-                             class="max-w-full max-h-80 rounded-lg object-contain" />
-                    </div>
-                </div>
-
-                <!-- Detection Output -->
-                <div class="bg-white rounded-2xl shadow-lg shadow-blue-900/5 overflow-hidden">
-                    <div class="px-5 py-3 border-b border-gray-100">
-                        <h2 class="text-sm font-semibold text-gray-700">Detection Output</h2>
-                    </div>
-                    <div class="p-4 flex items-center justify-center bg-gray-50 min-h-[280px]">
-                        <img src="{{ url_for('static', filename=output_url.replace('static/', '')) }}"
-                             alt="Forgery detection output"
-                             class="max-w-full max-h-80 rounded-lg object-contain" />
-                    </div>
-                </div>
-            </div>
-
-            <!-- ===== Action Buttons ===== -->
-            <div class="flex flex-col sm:flex-row items-center justify-center gap-3 animate-in-delay-2">
-
-                <!-- Download Result -->
-                <a href="{{ url_for('download', filepath=output_path) }}"
-                   class="w-full sm:w-auto inline-flex items-center justify-center gap-2
-                          bg-blue-600 hover:bg-blue-700 active:bg-blue-800
-                          text-white font-semibold rounded-xl px-6 py-3.5
-                          shadow-lg shadow-blue-600/25 transition-all duration-200">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
-                         viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+<body class="site-shell">
+    <main class="fx-page">
+        <header class="fx-topbar fx-reveal">
+            <div class="fx-brand">
+                <span class="fx-brand-badge" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2l8 4v6c0 5-3.8 9.4-8 10-4.2-.6-8-5-8-10V6l8-4z" />
                     </svg>
-                    Download Result
-                </a>
+                </span>
+                <div>
+                    <div class="fx-brand-title">Analysis Result Workspace</div>
+                    <div class="fx-brand-subtitle">Visual forensic inspection and export</div>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <a href="{{ url_for('index') }}" class="fx-btn fx-btn-secondary">New Analysis</a>
+                <a href="{{ url_for('metrics_dashboard') }}" class="fx-btn fx-btn-accent">Metrics</a>
+            </div>
+        </header>
 
-                <!-- Analyze Another -->
-                <a href="{{ url_for('index') }}"
-                   class="w-full sm:w-auto inline-flex items-center justify-center gap-2
-                          bg-white hover:bg-gray-50 border border-gray-300
-                          text-gray-700 font-semibold rounded-xl px-6 py-3.5
-                          shadow-sm transition-all duration-200">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
-                         viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                              d="M4 4v5h.582m15.356 2A8.001 8.001 0
-                              004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0
-                              01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Analyze Another Image
-                </a>
+        <section class="fx-card fx-reveal-delay-1">
+            <div class="fx-card-body">
+                {% if forgery_detected %}
+                <span class="fx-pill" style="border-color: rgba(220, 38, 38, 0.35); color: #9f1239; background: rgba(254, 226, 226, 0.85);">
+                    <span class="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                    Forgery detected
+                </span>
+                <h1 class="fx-title fx-status-positive" style="margin-top: 0.7rem;">Suspicious Copy-Move Activity Found</h1>
+                <p class="fx-subtext" style="margin-top: 0.55rem;">The pipeline identified duplication patterns consistent with tampering.</p>
+                {% else %}
+                <span class="fx-pill" style="border-color: rgba(22, 163, 74, 0.35); color: #166534; background: rgba(220, 252, 231, 0.85);">
+                    <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    No forgery detected
+                </span>
+                <h1 class="fx-title fx-status-negative" style="margin-top: 0.7rem;">No Copy-Move Evidence Identified</h1>
+                <p class="fx-subtext" style="margin-top: 0.55rem;">The image appears authentic according to current detection settings.</p>
+                {% endif %}
+
+                <div class="fx-metric-strip">
+                    <div class="fx-metric-cell">
+                        <p class="fx-metric-name">Confidence</p>
+                        <p class="fx-metric-value">{{ "%.0f"|format(confidence * 100) }}%</p>
+                    </div>
+                    <div class="fx-metric-cell">
+                        <p class="fx-metric-name">Regions Found</p>
+                        <p class="fx-metric-value">{{ num_regions }}</p>
+                    </div>
+                    <div class="fx-metric-cell">
+                        <p class="fx-metric-name">Processing Time</p>
+                        <p class="fx-metric-value">{{ processing_time }}s</p>
+                    </div>
+                </div>
+
+                <div style="margin-top: 0.9rem;">
+                    <p class="fx-info-title">Confidence Profile</p>
+                    <div style="margin-top: 0.45rem; width: 100%; height: 10px; border-radius: 999px; background: rgba(23, 52, 90, 0.12); overflow: hidden;">
+                        <div style="height: 100%; width: {{ "%.0f"|format(confidence * 100) }}%; border-radius: 999px; background: {% if confidence >= 0.7 %}linear-gradient(90deg, #ef4444, #dc2626){% elif confidence >= 0.4 %}linear-gradient(90deg, #f59e0b, #d97706){% else %}linear-gradient(90deg, #22c55e, #16a34a){% endif %};"></div>
+                    </div>
+                    <p class="fx-subtext" style="margin-top: 0.4rem; font-size: 0.82rem;">
+                        {% if confidence >= 0.7 %}High-confidence tampering signal
+                        {% elif confidence >= 0.4 %}Moderate signal, manual review recommended
+                        {% elif confidence > 0 %}Low signal, likely authentic but review advised
+                        {% else %}No detectable tampering signal{% endif %}
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section id="comparisonSlider" class="hidden comparison-container fx-reveal-delay-2" style="margin-top: 1rem;">
+            <div class="px-4 py-3 border-b border-slate-200/70 flex items-center justify-between gap-2">
+                <h2 class="font-semibold text-slate-800">Interactive Before/After Comparator</h2>
+                <span class="text-xs text-slate-500">Drag handle to inspect differences</span>
             </div>
 
-            <!-- Footer -->
-            <p class="text-center text-xs text-gray-400 pb-4">
-                Powered by DCT + SIFT analysis &middot; Copy-Move Forgery Detection
-            </p>
-        </div>
-    </div>
+            <div class="relative bg-slate-100/70">
+                <img src="{{ url_for('static', filename=original_url.replace('static/', '')) }}" alt="Original uploaded image" />
+
+                <div id="compOverlay" class="comp-overlay">
+                    <img src="{{ url_for('static', filename=output_url.replace('static/', '')) }}" alt="Forgery detection output" />
+                </div>
+
+                <div id="compDivider" class="comp-divider"></div>
+
+                <span id="labelOriginal" class="comp-label comp-label-left">Original</span>
+                <span id="labelDetected" class="comp-label comp-label-right">Detected</span>
+
+                <input type="range" id="compSliderRange" class="comp-range" min="0" max="100" value="50" aria-label="Comparison slider" />
+            </div>
+        </section>
+
+        <section id="comparisonFallback" class="grid grid-cols-1 md:grid-cols-2 gap-4 fx-reveal-delay-2" style="margin-top: 1rem;">
+            <article class="fx-card-soft">
+                <div class="fx-card-body" style="padding-bottom: 0.9rem;">
+                    <p class="fx-info-title">Original Image</p>
+                </div>
+                <div class="px-4 pb-4 flex items-center justify-center bg-slate-100/70 min-h-[250px]">
+                    <img src="{{ url_for('static', filename=original_url.replace('static/', '')) }}" alt="Original uploaded image" class="max-w-full max-h-80 rounded-xl object-contain" />
+                </div>
+            </article>
+
+            <article class="fx-card-soft">
+                <div class="fx-card-body" style="padding-bottom: 0.9rem;">
+                    <p class="fx-info-title">Detection Output</p>
+                </div>
+                <div class="px-4 pb-4 flex items-center justify-center bg-slate-100/70 min-h-[250px]">
+                    <img src="{{ url_for('static', filename=output_url.replace('static/', '')) }}" alt="Forgery detection output" class="max-w-full max-h-80 rounded-xl object-contain" />
+                </div>
+            </article>
+        </section>
+
+        <section class="flex flex-col sm:flex-row items-center justify-center gap-3 fx-reveal-delay-2" style="margin-top: 1rem;">
+            <a href="{{ url_for('download', filepath=output_path) }}" class="fx-btn fx-btn-primary w-full sm:w-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Result
+            </a>
+            <a href="{{ url_for('index') }}" class="fx-btn fx-btn-secondary w-full sm:w-auto">Analyze Another Image</a>
+            <a href="{{ url_for('metrics_dashboard') }}" class="fx-btn fx-btn-accent w-full sm:w-auto">Open Metrics Dashboard</a>
+        </section>
+
+        <footer class="fx-footer">Copy-Move Forgery Detection Studio · Result review panel</footer>
+    </main>
 
     <!-- Comparison slider script (progressive enhancement) -->
     <script src="{{ url_for('static', filename='js/comparison-slider.js') }}"></script>
